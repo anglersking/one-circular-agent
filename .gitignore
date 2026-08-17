@@ -67,3 +67,9 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Finder and ESP-IDF generated local files
+.DS_Store
+/example/idf/managed_components/
+/example/idf/sdkconfig
+/example/idf/sdkconfig.old

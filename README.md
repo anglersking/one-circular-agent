@@ -4,7 +4,17 @@
 
 机器人形式不能局限于人形具身，桌面智能体也是一个很好的落地方向。One Circular Agent 是 ONE 系列的第一种形态：用一个 1.73 英寸圆形 AMOLED 作为“脸”或“仪表”，先做出能看、能摸、能联网的桌面设备，再逐步扩展到家居控制、车辆仪表，以及桌面机器人的头部或胸部显示。
 
-> 当前仓库的起点是项目概念和硬件验证，固件、外壳和服务端会按里程碑逐步加入。README 中标为“示例”的接口是建议的数据协议，不代表已经在本仓库实现。
+> 当前仓库已提供经过实机编译与烧录验证的 ESP-IDF 显示/触摸例程；外壳、桌面端 Agent Bridge 和服务端会按里程碑逐步加入。README 中标为“示例”的接口是建议的数据协议，不代表已经在本仓库实现。
+
+## 可直接烧录的 ESP-IDF 例程
+
+[`example/idf/`](example/idf/README.md) 是 ONE 系列的第一个可运行硬件例程：ESP32-S3 驱动 OSPTEK 1.73 英寸 CO5300 QSPI AMOLED 和 CST820 触摸，并运行来自 SquareLine Studio 的 LVGL 9 圆形界面。
+
+- 已在 ESP-IDF `5.5.2`、LVGL `9.4.0`、ESP32-S3（16 MB Flash、8 MB Octal PSRAM）上完成实机编译、烧录和串口启动验证。
+- SquareLine 原始设计为 `392x392`，例程会在运行时等比适配到 `466x466` 圆屏。
+- 示例只解决屏幕、触摸与 LVGL UI 基础；Codex 用量、Home Assistant/MQTT 和车辆数据应通过桌面端 Agent Bridge 分阶段接入。
+
+进入 `example/idf/` 后先执行 `idf.py set-target esp32s3`，再执行 `idf.py build`；随后以 `idf.py -p <串口> flash monitor` 烧录。完整的安装、接线、GPIO 和排错说明见 [例程 README](example/idf/README.md)。
 
 ## ONE 系列的产品哲学
 
@@ -189,7 +199,7 @@ J2: SCL42/SDA41/RST40/INT39。请只修改 firmware/ui_home.c，
 
 ## 里程碑
 
-- [ ] **P0 硬件点亮**：CO5300 显示、CST820 触摸、LVGL 圆形裁剪/旋转。
+- [x] **P0 硬件点亮**：CO5300 显示、CST820 触摸、LVGL 圆形缩放适配；见 [`example/idf/`](example/idf/README.md)。
 - [ ] **P1 桌面时钟**：时间、天气、亮度、休眠和触摸反馈。
 - [ ] **P2 家居卡片**：Home Assistant/MQTT 状态、确认、离线提示。
 - [ ] **P3 Agent Bridge**：统一的本地 WebSocket/HTTP 数据协议和日志页。
