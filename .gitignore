@@ -70,6 +70,6 @@ Testing/
 
 # Finder and ESP-IDF generated local files
 .DS_Store
-/example/idf/managed_components/
-/example/idf/sdkconfig
-/example/idf/sdkconfig.old
+/example/idf/**/managed_components/
+/example/idf/**/sdkconfig
+/example/idf/**/sdkconfig.old
