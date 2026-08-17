@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -211,11 +212,21 @@ static esp_err_t http_event_handler(esp_http_client_event_t *event)
 static bool json_number(cJSON *object, const char *name, float *value)
 {
     cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
-    if (!cJSON_IsNumber(item)) {
-        return false;
+    if (cJSON_IsNumber(item)) {
+        *value = (float)item->valuedouble;
+        return true;
     }
-    *value = (float)item->valuedouble;
-    return true;
+
+    if (cJSON_IsString(item) && item->valuestring != NULL) {
+        char *end = NULL;
+        float parsed = strtof(item->valuestring, &end);
+        if (end != item->valuestring && *end == '\0') {
+            *value = parsed;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static bool deepseek_fetch_balance(balance_result_t *result)
