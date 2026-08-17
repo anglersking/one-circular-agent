@@ -73,3 +73,4 @@ Testing/
 /example/idf/**/managed_components/
 /example/idf/**/sdkconfig
 /example/idf/**/sdkconfig.old
+/example/idf/**/main/agent_config.h

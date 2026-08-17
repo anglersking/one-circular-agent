@@ -8,7 +8,7 @@
 
 ## 可直接烧录的 ESP-IDF 例程
 
-[`example/idf/`](example/idf/README.md) 是 ESP-IDF 例程索引。原厂硬件基准工程是 [`esp32s3-co5300-osptek-lvgl9`](example/idf/esp32s3-co5300-osptek-lvgl9/README.md)，用于验证 CO5300 显示和 CST820 触摸；ONE 的可运行工程是 [`esp32s3-co5300-agent-watch`](example/idf/esp32s3-co5300-agent-watch/README.md)，运行来自 SquareLine Studio 的 LVGL 9 圆形界面。
+[`example/idf/`](example/idf/README.md) 是 ESP-IDF 例程索引。原厂硬件基准工程是 [`esp32s3-co5300-osptek-lvgl9`](example/idf/esp32s3-co5300-osptek-lvgl9/README.md)，用于验证 CO5300 显示和 CST820 触摸；[`esp32s3-co5300-deepseek-quota`](example/idf/esp32s3-co5300-deepseek-quota/README.md) 提供像素 Agent 表情、Wi-Fi、DeepSeek 余额和柱状历史；ONE 的 UI 工程是 [`esp32s3-co5300-agent-watch`](example/idf/esp32s3-co5300-agent-watch/README.md)，运行来自 SquareLine Studio 的 LVGL 9 圆形界面。
 
 - 已在 ESP-IDF `5.5.2`、LVGL `9.4.0`、ESP32-S3（16 MB Flash、8 MB Octal PSRAM）上完成实机编译、烧录和串口启动验证。
 - SquareLine 原始设计为 `392x392`，例程会在运行时等比适配到 `466x466` 圆屏。
