@@ -303,6 +303,7 @@ static void balance_task(void *arg)
         if (deepseek_fetch_balance(&result)) {
             history_add(result.total);
             ui_balance(&result);
+            ESP_LOGI(TAG, "Balance synced: %.2f %s", result.total, result.currency);
             ui_status(result.available ? "BALANCE READY" : "API UNAVAILABLE",
                       result.available ? "SWIPE FOR HISTORY" : "CHECK API ACCOUNT", result.available);
         } else {
