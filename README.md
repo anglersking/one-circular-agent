@@ -8,13 +8,13 @@
 
 ## 可直接烧录的 ESP-IDF 例程
 
-[`example/idf/`](example/idf/README.md) 是 ESP-IDF 例程索引。第一个可运行工程是 [`esp32s3-co5300-agent-watch`](example/idf/esp32s3-co5300-agent-watch/README.md)：ESP32-S3 驱动 OSPTEK 1.73 英寸 CO5300 QSPI AMOLED 和 CST820 触摸，并运行来自 SquareLine Studio 的 LVGL 9 圆形界面。
+[`example/idf/`](example/idf/README.md) 是 ESP-IDF 例程索引。原厂硬件基准工程是 [`esp32s3-co5300-osptek-lvgl9`](example/idf/esp32s3-co5300-osptek-lvgl9/README.md)，用于验证 CO5300 显示和 CST820 触摸；ONE 的可运行工程是 [`esp32s3-co5300-agent-watch`](example/idf/esp32s3-co5300-agent-watch/README.md)，运行来自 SquareLine Studio 的 LVGL 9 圆形界面。
 
 - 已在 ESP-IDF `5.5.2`、LVGL `9.4.0`、ESP32-S3（16 MB Flash、8 MB Octal PSRAM）上完成实机编译、烧录和串口启动验证。
 - SquareLine 原始设计为 `392x392`，例程会在运行时等比适配到 `466x466` 圆屏。
 - 示例只解决屏幕、触摸与 LVGL UI 基础；Codex 用量、Home Assistant/MQTT 和车辆数据应通过桌面端 Agent Bridge 分阶段接入。
 
-进入 `example/idf/esp32s3-co5300-agent-watch/` 后先执行 `idf.py set-target esp32s3`，再执行 `idf.py build`；随后以 `idf.py -p <串口> flash monitor` 烧录。完整的安装、接线、GPIO 和排错说明见 [例程 README](example/idf/esp32s3-co5300-agent-watch/README.md)。
+首次接线或排查显示异常时，先烧录 [OSPTEK 原厂基准例程](example/idf/esp32s3-co5300-osptek-lvgl9/README.md)；确认显示和触摸正常后，再烧录 [ONE 智能体例程](example/idf/esp32s3-co5300-agent-watch/README.md)。每个例程都在自己的目录中执行 `idf.py set-target esp32s3`、`idf.py build` 和 `idf.py -p <串口> flash monitor`。
 
 ## ONE 系列的产品哲学
 
