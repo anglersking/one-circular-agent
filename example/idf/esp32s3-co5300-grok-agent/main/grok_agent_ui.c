@@ -4,23 +4,17 @@
 #include "grok_agent_ui.h"
 
 #define UI_SCREEN_SIZE 466
+#define BODY_POINTS 40
+#define EYE_POINTS 14
+#define MOUTH_POINTS 18
+#define PI_F 3.14159265358979323846f
 
 static lv_color_t s_bg;
 static lv_color_t s_ink;
 static lv_color_t s_eye_color;
 static lv_color_t s_accent;
-static lv_color_t s_text;
-static lv_color_t s_muted;
 static lv_color_t s_line;
-
-static lv_obj_t *s_root;
-static lv_obj_t *s_blob;
-static lv_obj_t *s_blob_shadow;
-static lv_obj_t *s_eye[2];
-static lv_obj_t *s_mouth;
-static lv_obj_t *s_star_top;
-static lv_obj_t *s_star_side;
-static lv_obj_t *s_face_mood;
+static lv_obj_t *s_face;
 static int32_t s_press_x;
 static int32_t s_press_y;
 static uint32_t s_motion_tick;
@@ -34,9 +28,13 @@ typedef enum {
     FACE_IDLE,
 } face_mood_t;
 
-static const char *const s_mood_names[] = {
-    "CURIOUS", "HAPPY", "PLAYFUL", "THINKING", "LISTENING", "IDLE",
-};
+typedef struct {
+    float width;
+    float height;
+    float x;
+    float y;
+    float slant;
+} eye_params_t;
 
 static void palette_init(void)
 {
@@ -45,152 +43,185 @@ static void palette_init(void)
     s_ink = lv_color_hex(0x0B0B0A);
     s_eye_color = lv_color_hex(0xF3EFE6);
     s_accent = lv_color_hex(0xE8D7A4);
-    s_text = lv_color_hex(0xF2EEE3);
-    s_muted = lv_color_hex(0x9C9588);
     s_line = lv_color_hex(0x4A443B);
 #else
     s_bg = lv_color_hex(0xEDE9E0);
     s_ink = lv_color_hex(0x111111);
     s_eye_color = lv_color_hex(0xF8F3E8);
     s_accent = lv_color_hex(0xE5BE58);
-    s_text = lv_color_hex(0x1D1B18);
-    s_muted = lv_color_hex(0x756E63);
     s_line = lv_color_hex(0xC9C1B4);
 #endif
 }
 
-static void make_block(lv_obj_t *obj, int32_t x, int32_t y, int32_t w, int32_t h, lv_color_t color)
+static float smoothstep(float value)
 {
-    lv_obj_remove_style_all(obj);
-    lv_obj_set_pos(obj, x, y);
-    lv_obj_set_size(obj, w, h);
-    lv_obj_set_style_bg_color(obj, color, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(obj, 0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(obj, 0, LV_PART_MAIN);
-    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_remove_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+    value = LV_CLAMP(0.0f, value, 1.0f);
+    return value * value * (3.0f - 2.0f * value);
 }
 
-static lv_obj_t *label(lv_obj_t *parent, const char *text, int32_t x, int32_t y, int32_t width,
-                       const lv_font_t *font, lv_color_t color, lv_text_align_t align)
+static void draw_polygon(lv_layer_t *layer, const lv_point_precise_t *points, uint32_t count,
+                         lv_point_precise_t center, lv_color_t color, lv_opa_t opa)
 {
-    lv_obj_t *obj = lv_label_create(parent);
-    lv_label_set_text(obj, text);
-    lv_obj_set_pos(obj, x, y);
-    lv_obj_set_width(obj, width);
-    lv_obj_set_style_text_font(obj, font, LV_PART_MAIN);
-    lv_obj_set_style_text_color(obj, color, LV_PART_MAIN);
-    lv_obj_set_style_text_align(obj, align, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_remove_flag(obj, LV_OBJ_FLAG_CLICKABLE);
-    return obj;
+    lv_draw_triangle_dsc_t triangle;
+    lv_draw_triangle_dsc_init(&triangle);
+    triangle.color = color;
+    triangle.opa = opa;
+    triangle.p[0] = center;
+
+    for (uint32_t i = 0; i < count; ++i) {
+        triangle.p[1] = points[i];
+        triangle.p[2] = points[(i + 1U) % count];
+        lv_draw_triangle(layer, &triangle);
+    }
 }
 
-static void set_round_object(lv_obj_t *obj, int32_t x, int32_t y, int32_t w, int32_t h,
-                             lv_color_t color, int32_t radius)
+static void body_points(lv_point_precise_t *points, float center_x, float center_y,
+                        float scale_x, float scale_y, float rotation, float phase)
 {
-    lv_obj_set_pos(obj, x, y);
-    lv_obj_set_size(obj, w, h);
-    lv_obj_set_style_bg_color(obj, color, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(obj, radius, LV_PART_MAIN);
-    lv_obj_set_style_border_width(obj, 0, LV_PART_MAIN);
+    const float radius = 181.0f;
+    const float cos_rotation = cosf(rotation);
+    const float sin_rotation = sinf(rotation);
+
+    for (uint32_t i = 0; i < BODY_POINTS; ++i) {
+        const float angle = 2.0f * PI_F * (float)i / (float)BODY_POINTS;
+        const float wobble = 1.0f + 0.035f * sinf(angle * 3.0f + phase)
+                             + 0.022f * cosf(angle * 5.0f - phase * 0.7f);
+        const float raw_x = cosf(angle) * radius * scale_x * wobble;
+        const float raw_y = sinf(angle) * radius * scale_y * wobble;
+        points[i].x = center_x + raw_x * cos_rotation - raw_y * sin_rotation;
+        points[i].y = center_y + raw_x * sin_rotation + raw_y * cos_rotation;
+    }
 }
 
-static void set_eye(uint8_t index, int32_t x, int32_t y, int32_t w, int32_t h)
+static eye_params_t eye_shape(face_mood_t mood, uint32_t index)
 {
-    set_round_object(s_eye[index], x, y, w, h, s_eye_color, LV_RADIUS_CIRCLE);
+    static const eye_params_t shapes[6][2] = {
+        {{57.0f, 103.0f, -51.0f, -1.0f, -0.12f}, {70.0f, 83.0f, 51.0f, 1.0f, 0.10f}},
+        {{86.0f, 53.0f, -49.0f, 1.0f, -0.04f}, {78.0f, 53.0f, 49.0f, 1.0f, 0.04f}},
+        {{52.0f, 82.0f, -54.0f, -5.0f, -0.18f}, {73.0f, 102.0f, 48.0f, 2.0f, 0.16f}},
+        {{76.0f, 58.0f, -50.0f, 8.0f, -0.18f}, {64.0f, 66.0f, 49.0f, 4.0f, 0.12f}},
+        {{46.0f, 112.0f, -48.0f, -3.0f, -0.03f}, {46.0f, 112.0f, 48.0f, -3.0f, 0.03f}},
+        {{63.0f, 91.0f, -50.0f, 1.0f, -0.08f}, {63.0f, 91.0f, 50.0f, 1.0f, 0.08f}},
+    };
+    return shapes[mood][index];
 }
 
-static void face_apply(face_mood_t mood, uint32_t tick)
+static eye_params_t lerp_eye(eye_params_t a, eye_params_t b, float amount)
 {
-    const float bob = sinf((float)tick * 0.045f) * 3.0f;
-    const bool blink = mood == FACE_IDLE && (tick % 140U) >= 134U;
-    const int32_t body_x = 108;
-    const int32_t body_y = 100 + (int32_t)bob;
-    const int32_t body_w = mood == FACE_HAPPY ? 258 : 250;
-    const int32_t body_h = mood == FACE_HAPPY ? 262 : 270;
+    eye_params_t result = {
+        .width = a.width + (b.width - a.width) * amount,
+        .height = a.height + (b.height - a.height) * amount,
+        .x = a.x + (b.x - a.x) * amount,
+        .y = a.y + (b.y - a.y) * amount,
+        .slant = a.slant + (b.slant - a.slant) * amount,
+    };
+    return result;
+}
 
-    set_round_object(s_blob_shadow, body_x + 8, body_y + 10, body_w, body_h, s_line, LV_RADIUS_CIRCLE);
-    lv_obj_set_style_bg_opa(s_blob_shadow, LV_OPA_30, LV_PART_MAIN);
-    set_round_object(s_blob, body_x, body_y, body_w, body_h, s_ink, LV_RADIUS_CIRCLE);
+static void eye_points(lv_point_precise_t *points, eye_params_t params, uint32_t index,
+                       float center_x, float center_y, float gaze_x, float gaze_y,
+                       float phase, float blink)
+{
+    const float eye_width = params.width;
+    const float eye_height = params.height * blink;
+    const float eye_center_x = center_x + params.x + gaze_x;
+    const float eye_center_y = center_y + params.y + gaze_y;
 
-    int32_t eye_y = 198 + (int32_t)bob;
-    int32_t left_x = 164;
-    int32_t right_x = 250;
-    int32_t left_w = 58;
-    int32_t right_w = 58;
-    int32_t eye_h = 73;
+    for (uint32_t i = 0; i < EYE_POINTS; ++i) {
+        const float angle = 2.0f * PI_F * (float)i / (float)EYE_POINTS;
+        const float wobble = 1.0f + 0.075f * sinf(angle * 3.0f + phase + (float)index)
+                             + 0.035f * cosf(angle * 5.0f - phase * 0.6f);
+        const float x = cosf(angle) * eye_width * 0.5f * wobble;
+        const float y = sinf(angle) * eye_height * 0.5f * wobble;
+        points[i].x = eye_center_x + x;
+        points[i].y = eye_center_y + y + params.slant * x;
+    }
+}
 
-    switch (mood) {
-        case FACE_CURIOUS:
-            left_w = 48;
-            right_w = 68;
-            eye_h = 82;
-            eye_y -= 5;
-            break;
-        case FACE_HAPPY:
-            left_x = 156;
-            right_x = 249;
-            left_w = 72;
-            right_w = 64;
-            eye_h = 43;
-            eye_y += 13;
-            break;
-        case FACE_PLAYFUL:
-            left_x = 166;
-            right_x = 248;
-            left_w = 48;
-            right_w = 68;
-            eye_h = 68;
-            eye_y -= 3;
-            break;
-        case FACE_THINKING:
-            left_x = 160;
-            right_x = 250;
-            left_w = 68;
-            right_w = 58;
-            eye_h = 55;
-            eye_y += 8;
-            break;
-        case FACE_LISTENING:
-            left_x = 168;
-            right_x = 250;
-            left_w = 46;
-            right_w = 46;
-            eye_h = 91;
-            eye_y -= 5;
-            break;
-        case FACE_IDLE:
-            break;
+static void mouth_points(lv_point_precise_t *points, float center_x, float center_y,
+                         float width, float height, float phase)
+{
+    for (uint32_t i = 0; i < MOUTH_POINTS; ++i) {
+        const float angle = 2.0f * PI_F * (float)i / (float)MOUTH_POINTS;
+        const float wobble = 1.0f + 0.04f * sinf(angle * 3.0f + phase);
+        points[i].x = center_x + cosf(angle) * width * 0.5f * wobble;
+        points[i].y = center_y + sinf(angle) * height * 0.5f * wobble;
+    }
+}
+
+static void face_draw_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_DRAW_MAIN) {
+        return;
     }
 
-    if (mood == FACE_IDLE && blink) {
-        eye_h = 8;
-        eye_y += 32;
+    lv_layer_t *layer = lv_event_get_layer(event);
+    const float tick = (float)s_motion_tick;
+    const float cycle = tick / 36.0f;
+    const face_mood_t mood = (face_mood_t)((uint32_t)cycle % 6U);
+    const face_mood_t next_mood = (face_mood_t)(((uint32_t)mood + 1U) % 6U);
+    const float transition = smoothstep(fmodf(cycle, 1.0f) / 0.24f);
+    const float phase = tick * 0.075f;
+    const float bob = sinf(tick * 0.055f) * 5.0f;
+    const float center_x = 233.0f + sinf(tick * 0.031f) * 3.0f;
+    const float center_y = 235.0f + bob;
+    const float scale_x = 0.98f + 0.035f * sinf(tick * 0.043f);
+    const float scale_y = 1.02f + 0.035f * cosf(tick * 0.051f);
+    const float rotation = 0.035f * sinf(tick * 0.037f);
+
+    lv_point_precise_t body[BODY_POINTS];
+    body_points(body, center_x + 7.0f, center_y + 9.0f, scale_x, scale_y, rotation, phase);
+    lv_point_precise_t body_center = {.x = center_x + 7.0f, .y = center_y + 9.0f};
+    draw_polygon(layer, body, BODY_POINTS, body_center, s_line, LV_OPA_30);
+
+    body_points(body, center_x, center_y, scale_x, scale_y, rotation, phase);
+    body_center.x = center_x;
+    body_center.y = center_y;
+    draw_polygon(layer, body, BODY_POINTS, body_center, s_ink, LV_OPA_COVER);
+
+    const bool blink = (s_motion_tick % 180U) >= 174U;
+    const float blink_amount = blink ? 0.08f : 1.0f;
+    for (uint32_t i = 0; i < 2; ++i) {
+        eye_params_t current = eye_shape(mood, i);
+        eye_params_t next = eye_shape(next_mood, i);
+        eye_params_t params = lerp_eye(current, next, transition);
+        const float gaze_x = sinf(tick * 0.065f + (float)i * 1.7f) * 5.0f;
+        const float gaze_y = cosf(tick * 0.047f + (float)i) * 3.0f;
+        lv_point_precise_t eye[EYE_POINTS];
+        eye_points(eye, params, i, center_x, center_y, gaze_x, gaze_y, phase, blink_amount);
+        lv_point_precise_t eye_center = {
+            .x = center_x + params.x + gaze_x,
+            .y = center_y + params.y + gaze_y,
+        };
+        draw_polygon(layer, eye, EYE_POINTS, eye_center, s_eye_color, LV_OPA_COVER);
     }
-    set_eye(0, left_x, eye_y, left_w, eye_h);
-    set_eye(1, right_x, eye_y, right_w, eye_h);
 
-    const int32_t mouth_w = mood == FACE_HAPPY ? 88 : (mood == FACE_THINKING ? 42 : 68);
-    const int32_t mouth_h = mood == FACE_IDLE ? 7 : (mood == FACE_HAPPY ? 12 : 10);
-    const int32_t mouth_x = (UI_SCREEN_SIZE - mouth_w) / 2;
-    const int32_t mouth_y = mood == FACE_IDLE ? 299 : (mood == FACE_HAPPY ? 297 : 302);
-    set_round_object(s_mouth, mouth_x, mouth_y + (int32_t)bob, mouth_w, mouth_h, s_eye_color,
-                     LV_RADIUS_CIRCLE);
+    const float mouth_width = 58.0f + 32.0f * sinf(transition * PI_F);
+    const float mouth_height = 9.0f + 6.0f * sinf(transition * PI_F);
+    lv_point_precise_t mouth[MOUTH_POINTS];
+    mouth_points(mouth, center_x, center_y + 84.0f, mouth_width, mouth_height, phase);
+    lv_point_precise_t mouth_center = {.x = center_x, .y = center_y + 84.0f};
+    draw_polygon(layer, mouth, MOUTH_POINTS, mouth_center, s_eye_color, LV_OPA_COVER);
 
-    lv_obj_set_y(s_star_top, 78 + (int32_t)(bob * 0.5f));
-    lv_obj_set_y(s_star_side, 178 - (int32_t)(bob * 0.4f));
-    lv_label_set_text(s_face_mood, s_mood_names[mood]);
+    /* A small state marker keeps the face readable without turning it into a dashboard. */
+    lv_draw_arc_dsc_t arc;
+    lv_draw_arc_dsc_init(&arc);
+    arc.color = s_accent;
+    arc.width = 3;
+    arc.opa = LV_OPA_70;
+    arc.center.x = (lv_coord_t)center_x;
+    arc.center.y = (lv_coord_t)center_y;
+    arc.radius = 207;
+    arc.start_angle = 218;
+    arc.end_angle = 218 + (uint16_t)(38U * ((uint32_t)mood + 1U));
+    lv_draw_arc(layer, &arc);
 }
 
 static void motion_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
     s_motion_tick++;
-    const face_mood_t mood = (face_mood_t)((s_motion_tick / 100U) % 6U);
-    face_apply(mood, s_motion_tick);
+    lv_obj_invalidate(s_face);
 }
 
 static void touch_event_cb(lv_event_t *event)
@@ -209,55 +240,28 @@ static void touch_event_cb(lv_event_t *event)
     }
     else if (code == LV_EVENT_RELEASED && abs(point.x - s_press_x) < 32 &&
              abs(point.y - s_press_y) < 32) {
-        s_motion_tick += 100U;
+        s_motion_tick += 36U;
+        lv_obj_invalidate(s_face);
     }
 }
 
 void grok_agent_ui_init(lv_display_t *display)
 {
     palette_init();
-    s_root = lv_disp_get_scr_act(display);
-    make_block(s_root, 0, 0, UI_SCREEN_SIZE, UI_SCREEN_SIZE, s_bg);
-    lv_obj_add_flag(s_root, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(s_root, touch_event_cb, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(s_root, touch_event_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_t *screen = lv_disp_get_scr_act(display);
+    lv_obj_remove_style_all(screen);
+    lv_obj_set_style_bg_color(screen, s_bg, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
 
-    label(s_root, "ONE / DESKTOP AGENT", 50, 35, 366, &lv_font_montserrat_14, s_muted,
-          LV_TEXT_ALIGN_CENTER);
-    label(s_root, "LVGL ICON STUDY", 70, 57, 326, &lv_font_montserrat_20, s_text,
-          LV_TEXT_ALIGN_CENTER);
-    s_face_mood = label(s_root, "CURIOUS", 75, 88, 316, &lv_font_montserrat_14, s_accent,
-                        LV_TEXT_ALIGN_CENTER);
+    s_face = lv_obj_create(screen);
+    lv_obj_remove_style_all(s_face);
+    lv_obj_set_pos(s_face, 0, 0);
+    lv_obj_set_size(s_face, UI_SCREEN_SIZE, UI_SCREEN_SIZE);
+    lv_obj_add_flag(s_face, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_face, face_draw_cb, LV_EVENT_DRAW_MAIN, NULL);
+    lv_obj_add_event_cb(s_face, touch_event_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(s_face, touch_event_cb, LV_EVENT_RELEASED, NULL);
 
-    s_blob_shadow = lv_obj_create(s_root);
-    make_block(s_blob_shadow, 116, 110, 250, 270, s_line);
-    lv_obj_set_style_radius(s_blob_shadow, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(s_blob_shadow, LV_OPA_30, LV_PART_MAIN);
-
-    s_blob = lv_obj_create(s_root);
-    make_block(s_blob, 108, 100, 250, 270, s_ink);
-    lv_obj_set_style_radius(s_blob, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-
-    s_eye[0] = lv_obj_create(s_root);
-    s_eye[1] = lv_obj_create(s_root);
-    make_block(s_eye[0], 164, 198, 58, 73, s_eye_color);
-    make_block(s_eye[1], 250, 198, 58, 73, s_eye_color);
-    lv_obj_set_style_radius(s_eye[0], LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_radius(s_eye[1], LV_RADIUS_CIRCLE, LV_PART_MAIN);
-
-    s_mouth = lv_obj_create(s_root);
-    make_block(s_mouth, 199, 302, 68, 10, s_eye_color);
-    lv_obj_set_style_radius(s_mouth, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-
-    s_star_top = label(s_root, "*", 86, 78, 24, &lv_font_montserrat_20, s_accent,
-                       LV_TEXT_ALIGN_CENTER);
-    s_star_side = label(s_root, "+", 361, 180, 24, &lv_font_montserrat_20, s_accent,
-                        LV_TEXT_ALIGN_CENTER);
-    label(s_root, "TAP TO CHANGE MOOD", 70, 407, 326, &lv_font_montserrat_14, s_muted,
-          LV_TEXT_ALIGN_CENTER);
-    label(s_root, "PURE LVGL / NO NETWORK", 70, 431, 326, &lv_font_montserrat_14, s_line,
-          LV_TEXT_ALIGN_CENTER);
-
-    face_apply(FACE_CURIOUS, 1);
-    lv_timer_create(motion_timer_cb, 50, NULL);
+    lv_timer_create(motion_timer_cb, 33, NULL);
+    lv_obj_invalidate(s_face);
 }
