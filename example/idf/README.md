@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | [`esp32s3-co5300-osptek-lvgl9/`](esp32s3-co5300-osptek-lvgl9/) | OSPTEK 原厂 ESP32-S3 + CO5300 + CST820 + LVGL 9 widget demo，作为屏幕和触摸硬件基准 | [来源、接线、编译与烧录](esp32s3-co5300-osptek-lvgl9/README.md) |
 | [`esp32s3-co5300-deepseek-quota/`](esp32s3-co5300-deepseek-quota/) | ESP32-S3 + CO5300 + CST820，像素 Agent 表情、Wi-Fi 和 DeepSeek 余额 / 柱状历史 | [本地配置、接线、编译与烧录](esp32s3-co5300-deepseek-quota/README.md) |
-| [`esp32s3-co5300-grok-agent/`](esp32s3-co5300-grok-agent/) | ESP32-S3 + CO5300 + CST820，独立 LVGL blob Agent 表情、多状态眼睛、Wi-Fi 和 DeepSeek 余额 / 柱状历史 | [参考边界、配置、接线、编译与烧录](esp32s3-co5300-grok-agent/README.md) |
+| [`esp32s3-co5300-grok-agent/`](esp32s3-co5300-grok-agent/) | ESP32-S3 + CO5300 + CST820，纯本地 LVGL blob Agent、多状态眼睛和点击交互；无 Wi-Fi、API 或余额功能 | [工程边界、接线、编译与烧录](esp32s3-co5300-grok-agent/README.md) |
 | [`esp32s3-co5300-agent-watch/`](esp32s3-co5300-agent-watch/) | ESP32-S3 + OSPTEK 1.73 英寸 CO5300 AMOLED + CST820，ONE 圆形智能体显示与触摸底座 | [接线、编译与烧录](esp32s3-co5300-agent-watch/README.md) |
 
 ## 使用一个例程
