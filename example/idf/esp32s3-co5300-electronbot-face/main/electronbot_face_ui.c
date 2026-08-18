@@ -4,7 +4,7 @@
 
 static const char *TAG = "ELECTRONBOT_FACE";
 
-/* Generated from ElectronBot Standalone's speak.json, then flattened to black. */
+/* ElectronBot animation, with the mouth region masked to black frame-by-frame. */
 extern const uint8_t _binary_electronbot_speak_gif_start[];
 extern const uint8_t _binary_electronbot_speak_gif_end[];
 
@@ -39,5 +39,5 @@ void electronbot_face_ui_init(lv_display_t *display)
         return;
     }
 
-    ESP_LOGI(TAG, "ElectronBot white-eye animation ready (466x466, black background)");
+    ESP_LOGI(TAG, "ElectronBot white-eye animation ready (466x466, black background, no mouth)");
 }

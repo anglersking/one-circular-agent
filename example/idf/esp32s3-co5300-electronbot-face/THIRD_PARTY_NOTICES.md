@@ -2,7 +2,7 @@
 
 ## ElectronBot Standalone Lottie expression
 
-The files `assets/electronbot_speak.json` and the derived
+The files `assets/electronbot_speak.json` and the derived, mouth-masked
 `assets/electronbot_speak.gif` are based on:
 
 https://github.com/maker-community/ElectronBot.Standalone

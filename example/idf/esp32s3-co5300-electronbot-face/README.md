@@ -1,16 +1,16 @@
 # ONE Circular Agent: ElectronBot White-Eye Face
 
-这是一个和 DeepSeek、Grok 完全隔离的 ESP-IDF 例程：在 OSPTEK `466x466` CO5300 QSPI AMOLED 上播放 ElectronBot 风格的**黑底白眼**表情。
+这是一个和 DeepSeek、Grok 完全隔离的 ESP-IDF 例程：在 OSPTEK `466x466` CO5300 QSPI AMOLED 上绘制 ElectronBot 风格的**黑底白眼**表情。
 
-- 黑色全屏背景，白色眼睛和白色嘴部。
-- 表情资源来自 ElectronBot Standalone 的 `speak.json`，预渲染为 `466x466` GIF。
+- 黑色全屏背景，只绘制白色双眼。
+- 不绘制嘴部，只保留白色双眼，避免嘴部在圆屏上显得突兀。
 - 由 LVGL 9 内置 GIF 解码器在 ESP32-S3 上按帧播放，不运行 JavaScript，也不是单张图片。
-- GIF 数据通过 `EMBED_FILES` 编译进固件，运行时从 Flash 读取，解码帧缓冲放在 LVGL 内存中。
+- 保留 ElectronBot 原始动画的眨眼、睁闭眼和缓动效果；嘴部区域已逐帧遮为黑色，避免违和。
 - 触摸、Wi-Fi、API Key、DeepSeek 余额和图表都不在这个例程中。
 
 ## 来源和许可
 
-本例程使用 [maker-community/ElectronBot.Standalone](https://github.com/maker-community/ElectronBot.Standalone) 中的 `src/ElectronBot.Standalone.Core/LottieFiles/speak.json`（MIT License）。仓库中的 `assets/electronbot_speak.json` 保留了原始 Lottie 文件，`assets/electronbot_speak.gif` 是由它预渲染并压成黑底后的设备资源。归属和许可证见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+本例程参考 [maker-community/ElectronBot.Standalone](https://github.com/maker-community/ElectronBot.Standalone) 中的 `src/ElectronBot.Standalone.Core/LottieFiles/speak.json`（MIT License）。`assets/electronbot_speak.gif` 是原始动画经黑底化并遮掉嘴部后的设备资源；归属和许可证见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
 这不是 ElectronBot 官方固件，也不包含官方硬件控制协议；这里只移植屏幕上的表情表现。
 
@@ -45,8 +45,7 @@ idf.py -p /dev/cu.usbmodemXXXX flash monitor
 串口启动后应看到：
 
 ```text
-ELECTRONBOT_FACE: ElectronBot white-eye animation ready (466x466, black background)
+ELECTRONBOT_FACE: ElectronBot white-eye animation ready (466x466, black background, no mouth)
 ```
 
 退出串口监视器按 `Ctrl+]`。烧录会覆盖板子当前运行的例程；切回 DeepSeek 或 Grok 时，进入对应目录重新执行同样的 `build`、`flash` 命令即可。
-
