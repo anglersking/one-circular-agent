@@ -4,7 +4,7 @@
 
 `esp32s3-co5300-deepseek-quota` 是稳定基线；本目录是 feature test。两个工程各自有独立的 `CMakeLists.txt`、`main/`、`components/`、`sdkconfig` 和 `build/`，不会互相覆盖。
 
-当前版本已经把首页脸部替换为蓝色 ElectronBot 风格 GIF 动画；余额页、Wi-Fi 和 API 数据链路仍沿用基线。Wi-Fi 在连续失败后每 30 秒继续尝试重连，恢复网络后会自动回到余额同步。
+当前版本已经把首页脸部替换为蓝色 ElectronBot 风格 GIF 动画；余额页、Wi-Fi 和 API 数据链路仍沿用基线。Wi-Fi 在连续失败后每 30 秒继续尝试重连，恢复网络后会自动回到余额同步。联网后还会通过 NTP 显示本地时间，并提供周五状态页、日历页、天气/网络页和设置状态页。
 
 模型字段目前用于屏幕身份显示。DeepSeek `/user/balance` 不接收模型参数，因此改 `AGENT_MODEL_NAME` 不会改变余额结果；后续会把 provider、model 和 usage/balance endpoint 拆成适配器，接入其他模型时只增加对应适配器。
 
@@ -12,6 +12,10 @@
 
 - 首页：黑底蓝眼 ElectronBot 风格动画，保留外圈仪表环，不再显示顶部五个装饰方块或嘴部图形；同时显示 Wi-Fi / API 同步状态。
 - 向左或向右划：切到余额页，显示可用余额、赠送余额、充值余额和最近 8 次同步的柱状图。
+- 继续横向滑动：进入 `FRIDAY CHECK` 页，周五显示绿色圆环，其他日期显示红色圆环；网络时间未同步时显示黄色状态。
+- 再滑动：进入 `CALENDAR` 页显示公历和星期；农历/黄历卡片已预留独立数据源位置，暂不伪造内容。
+- 再滑动：进入 `WEATHER` 页，使用 Open-Meteo 查询天气，同时显示网络 IP 和 RSSI。
+- 最后进入 `SETTINGS` 页，显示 Provider、Model、Wi-Fi 和 API Key 是否已配置；敏感输入仍使用本地配置文件，后续再接手机网页配置。点击 `AUTO PLAY` 可打开/关闭自动轮播，点击 `2S`、`5S` 或 `10S` 选择轮播间隔；关闭时仍使用手动左右滑动。
 - 主题：默认蓝白；配置 `AGENT_THEME_AIRPORT 1` 切换到黄灰机场仪表风。
 - 轮询：默认每 5 分钟查询一次。历史数据保存在设备 NVS 中，重启后仍可显示。
 
@@ -35,8 +39,12 @@ cp main/agent_config.h.example main/agent_config.h
 #define AGENT_WIFI_PASSWORD "your-wifi-password"
 #define AGENT_API_KEY "your-deepseek-api-key"
 #define AGENT_BALANCE_URL "https://api.deepseek.com/user/balance"
+#define AGENT_PROVIDER_NAME "DeepSeek"
 #define AGENT_MODEL_NAME "deepseek-chat"
 #define AGENT_DISPLAY_NAME "DEEPSEEK AGENT"
+#define AGENT_TIMEZONE "CST-8"
+#define AGENT_LOCATION_NAME "SHANGHAI"
+#define AGENT_WEATHER_URL "https://api.open-meteo.com/v1/forecast?latitude=31.2304&longitude=121.4737&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto"
 #define AGENT_THEME_AIRPORT 0
 #define AGENT_POLL_INTERVAL_SECONDS 300
 ```
@@ -76,6 +84,8 @@ idf.py set-target esp32s3
 idf.py build
 idf.py -p /dev/cu.usbmodemXXXX flash monitor
 ```
+
+自动轮播是运行时设置，默认关闭；打开后会循环浏览主页、余额、Friday、日历、天气和设置页，设置页之后自动回到主页。关闭后恢复手动左右滑动。
 
 烧录会覆盖板子当前程序。启动后先看到 Agent 表情页；Wi-Fi 成功联网且 API Key 有效时，状态会变为 `BALANCE READY`。横向划动屏幕可进入余额页。
 

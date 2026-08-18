@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
@@ -19,6 +20,7 @@
 #include "esp_lcd_touch.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_sntp.h"
 #include "esp_wifi.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -58,6 +60,24 @@ static const char *TAG = "AGENT_QUOTA";
 #define WIFI_MAX_RETRIES 5
 #define HTTP_RESPONSE_SIZE 2048
 
+#ifndef AGENT_PROVIDER_NAME
+#define AGENT_PROVIDER_NAME "DeepSeek"
+#endif
+
+#ifndef AGENT_TIMEZONE
+#define AGENT_TIMEZONE "CST-8"
+#endif
+
+#ifndef AGENT_LOCATION_NAME
+#define AGENT_LOCATION_NAME "SHANGHAI"
+#endif
+
+#ifndef AGENT_WEATHER_URL
+#define AGENT_WEATHER_URL \
+    "https://api.open-meteo.com/v1/forecast?latitude=31.2304&longitude=121.4737" \
+    "&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto"
+#endif
+
 typedef struct {
     float values[AGENT_QUOTA_HISTORY_POINTS];
 } balance_history_t;
@@ -75,9 +95,17 @@ typedef struct {
     size_t length;
 } http_response_t;
 
+typedef struct {
+    float temperature;
+    float wind_speed;
+    int weather_code;
+} weather_result_t;
+
 static EventGroupHandle_t s_wifi_events;
 static uint8_t s_wifi_retries;
 static balance_history_t s_history;
+static bool s_sntp_started;
+static esp_netif_t *s_sta_netif;
 
 static void co5300_area_rounder_cb(lv_area_t *area, void *user_data)
 {
@@ -102,6 +130,76 @@ static void ui_balance(const balance_result_t *result)
         agent_quota_ui_set_balance(result->total, result->granted, result->topped_up, result->currency,
                                    result->available, s_history.values);
         esp_lv_adapter_unlock();
+    }
+}
+
+static void ui_clock(const char *time_text, const char *date_text, const char *weekday_text,
+                     bool synced, bool is_friday, int days_until_friday)
+{
+    if (esp_lv_adapter_lock(pdMS_TO_TICKS(500)) == ESP_OK) {
+        agent_quota_ui_set_clock(time_text, date_text, weekday_text, synced, is_friday, days_until_friday);
+        esp_lv_adapter_unlock();
+    }
+}
+
+static void ui_network(const char *ip_text, int rssi)
+{
+    if (esp_lv_adapter_lock(pdMS_TO_TICKS(500)) == ESP_OK) {
+        agent_quota_ui_set_network(ip_text, rssi);
+        esp_lv_adapter_unlock();
+    }
+}
+
+static void ui_weather(const weather_result_t *result, bool ready, const char *condition)
+{
+    if (esp_lv_adapter_lock(pdMS_TO_TICKS(500)) == ESP_OK) {
+        agent_quota_ui_set_weather(AGENT_LOCATION_NAME, result != NULL ? result->temperature : 0.0f,
+                                   condition, result != NULL ? result->wind_speed : 0.0f, ready);
+        esp_lv_adapter_unlock();
+    }
+}
+
+static void time_sync_start(void)
+{
+    if (s_sntp_started) {
+        return;
+    }
+
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_init();
+    s_sntp_started = true;
+    ESP_LOGI(TAG, "Network time sync started");
+}
+
+static void clock_task(void *arg)
+{
+    (void)arg;
+    static const char *const weekday_names[] = {
+        "SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY",
+    };
+
+    while (true) {
+        time_t now = time(NULL);
+        bool synced = now >= 1700000000;
+        char time_text[16] = "--:--";
+        char date_text[20] = "TIME NOT SYNCED";
+        const char *weekday_text = "WEEKDAY UNKNOWN";
+        bool is_friday = false;
+        int days_until_friday = 0;
+
+        if (synced) {
+            struct tm local_time;
+            localtime_r(&now, &local_time);
+            strftime(time_text, sizeof(time_text), "%H:%M:%S", &local_time);
+            strftime(date_text, sizeof(date_text), "%Y-%m-%d", &local_time);
+            weekday_text = weekday_names[local_time.tm_wday];
+            is_friday = local_time.tm_wday == 5;
+            days_until_friday = (5 - local_time.tm_wday + 7) % 7;
+        }
+
+        ui_clock(time_text, date_text, weekday_text, synced, is_friday, days_until_friday);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
@@ -153,6 +251,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupClearBits(s_wifi_events, WIFI_CONNECTED_BIT);
+        ui_network(NULL, -127);
         if (s_wifi_retries++ < WIFI_MAX_RETRIES) {
             ui_status("WIFI RETRY", "CONNECTING TO NETWORK", false);
             esp_wifi_connect();
@@ -164,6 +263,18 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         s_wifi_retries = 0;
         xEventGroupClearBits(s_wifi_events, WIFI_FAILED_BIT);
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
+        time_sync_start();
+        char ip_text[16] = "--";
+        int rssi = -127;
+        esp_netif_ip_info_t ip_info;
+        if (s_sta_netif != NULL && esp_netif_get_ip_info(s_sta_netif, &ip_info) == ESP_OK) {
+            snprintf(ip_text, sizeof(ip_text), IPSTR, IP2STR(&ip_info.ip));
+        }
+        wifi_ap_record_t ap_info;
+        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+            rssi = ap_info.rssi;
+        }
+        ui_network(ip_text, rssi);
         ui_status("WIFI ONLINE", "READY TO SYNC", true);
     }
 }
@@ -173,7 +284,7 @@ static void wifi_start(void)
     s_wifi_events = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
+    s_sta_netif = esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t init_config = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&init_config));
@@ -288,6 +399,101 @@ static bool deepseek_fetch_balance(balance_result_t *result)
     return true;
 }
 
+static const char *weather_condition_text(int weather_code)
+{
+    if (weather_code == 0) {
+        return "CLEAR SKY";
+    }
+    if (weather_code <= 3) {
+        return weather_code == 3 ? "OVERCAST" : "PARTLY CLOUDY";
+    }
+    if (weather_code == 45 || weather_code == 48) {
+        return "FOG";
+    }
+    if (weather_code >= 51 && weather_code <= 57) {
+        return "DRIZZLE";
+    }
+    if (weather_code >= 61 && weather_code <= 67) {
+        return "RAIN";
+    }
+    if (weather_code >= 71 && weather_code <= 77) {
+        return "SNOW";
+    }
+    if (weather_code >= 80 && weather_code <= 82) {
+        return "RAIN SHOWERS";
+    }
+    if (weather_code >= 95) {
+        return "THUNDERSTORM";
+    }
+    return "WEATHER READY";
+}
+
+static bool weather_fetch(weather_result_t *result)
+{
+    http_response_t response = {0};
+    esp_http_client_config_t config = {
+        .url = AGENT_WEATHER_URL,
+        .method = HTTP_METHOD_GET,
+        .timeout_ms = 12000,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .event_handler = http_event_handler,
+        .user_data = &response,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == NULL) {
+        return false;
+    }
+
+    esp_http_client_set_header(client, "Accept", "application/json");
+    esp_err_t err = esp_http_client_perform(client);
+    int status = esp_http_client_get_status_code(client);
+    esp_http_client_cleanup(client);
+    if (err != ESP_OK || status != 200) {
+        ESP_LOGW(TAG, "Weather request failed: err=%s status=%d", esp_err_to_name(err), status);
+        return false;
+    }
+
+    cJSON *root = cJSON_Parse(response.data);
+    cJSON *current = root != NULL ? cJSON_GetObjectItemCaseSensitive(root, "current") : NULL;
+    if (current == NULL) {
+        cJSON_Delete(root);
+        return false;
+    }
+
+    memset(result, 0, sizeof(*result));
+    float weather_code = 0.0f;
+    bool valid = json_number(current, "temperature_2m", &result->temperature) &&
+                 json_number(current, "wind_speed_10m", &result->wind_speed) &&
+                 json_number(current, "weather_code", &weather_code);
+    result->weather_code = (int)weather_code;
+    cJSON_Delete(root);
+    return valid;
+}
+
+static void weather_task(void *arg)
+{
+    (void)arg;
+    const TickType_t refresh_delay = pdMS_TO_TICKS(30 * 60 * 1000);
+
+    while (true) {
+        EventBits_t bits = xEventGroupWaitBits(s_wifi_events, WIFI_CONNECTED_BIT,
+                                               pdFALSE, pdFALSE, pdMS_TO_TICKS(30000));
+        if ((bits & WIFI_CONNECTED_BIT) == 0) {
+            continue;
+        }
+
+        ui_weather(NULL, false, "SYNCING WEATHER");
+        weather_result_t result;
+        if (weather_fetch(&result)) {
+            ui_weather(&result, true, weather_condition_text(result.weather_code));
+            ESP_LOGI(TAG, "Weather synced: %.1f C, code=%d", result.temperature, result.weather_code);
+        } else {
+            ui_weather(NULL, false, "WEATHER UNAVAILABLE");
+        }
+        vTaskDelay(refresh_delay);
+    }
+}
+
 static void balance_task(void *arg)
 {
     (void)arg;
@@ -332,6 +538,9 @@ static void balance_task(void *arg)
 void app_main(void)
 {
     ESP_LOGI(TAG, "Starting DeepSeek feature test");
+    setenv("TZ", AGENT_TIMEZONE, 1);
+    tzset();
+
     esp_err_t nvs_error = nvs_flash_init();
     if (nvs_error == ESP_ERR_NVS_NO_FREE_PAGES || nvs_error == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -405,7 +614,10 @@ void app_main(void)
     esp_lv_adapter_config_t adapter_config = ESP_LV_ADAPTER_DEFAULT_CONFIG();
     adapter_config.stack_in_psram = true;
     ESP_ERROR_CHECK(esp_lv_adapter_init(&adapter_config));
-    esp_lv_adapter_display_config_t display_config = ESP_LV_ADAPTER_DISPLAY_SPI_WITH_PSRAM_DEFAULT_CONFIG(
+    // QSPI color transfers need an internal DMA-capable line buffer. Keep the
+    // large GIF and application state in PSRAM, but render the LCD in small
+    // internal-RAM chunks so the SPI driver never allocates a full-frame bounce buffer.
+    esp_lv_adapter_display_config_t display_config = ESP_LV_ADAPTER_DISPLAY_SPI_WITHOUT_PSRAM_DEFAULT_CONFIG(
         panel, panel_io, LCD_H_RES, LCD_V_RES, ESP_LV_ADAPTER_ROTATE_0);
     lv_display_t *display = esp_lv_adapter_register_display(&display_config);
     assert(display != NULL);
@@ -418,8 +630,12 @@ void app_main(void)
 
     if (esp_lv_adapter_lock(portMAX_DELAY) == ESP_OK) {
         agent_quota_ui_init(display);
+        agent_quota_ui_set_settings(AGENT_PROVIDER_NAME, AGENT_MODEL_NAME, AGENT_WIFI_SSID,
+                                    wifi_is_configured(), api_is_configured());
         esp_lv_adapter_unlock();
     }
+
+    xTaskCreate(clock_task, "agent_clock", 4096, NULL, 4, NULL);
 
     if (!wifi_is_configured()) {
         ui_status("CONFIG REQUIRED", "EDIT AGENT_CONFIG.H", false);
@@ -428,4 +644,5 @@ void app_main(void)
 
     wifi_start();
     xTaskCreate(balance_task, "balance_sync", 8192, NULL, 5, NULL);
+    xTaskCreate(weather_task, "weather_sync", 8192, NULL, 4, NULL);
 }

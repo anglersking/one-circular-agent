@@ -11,8 +11,12 @@
 /* DeepSeek user balance API. Keep the API key local. */
 #define AGENT_API_KEY ""
 #define AGENT_BALANCE_URL "https://api.deepseek.com/user/balance"
+#define AGENT_PROVIDER_NAME "DeepSeek"
 #define AGENT_MODEL_NAME "deepseek-chat"
 #define AGENT_DISPLAY_NAME "DEEPSEEK AGENT"
+#define AGENT_TIMEZONE "CST-8"
+#define AGENT_LOCATION_NAME "SHANGHAI"
+#define AGENT_WEATHER_URL "https://api.open-meteo.com/v1/forecast?latitude=31.2304&longitude=121.4737&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto"
 
 /* 0: blue/white instrument theme, 1: airport yellow/gray theme. */
 #define AGENT_THEME_AIRPORT 0
