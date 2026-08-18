@@ -51,7 +51,7 @@ static void co5300_area_rounder_cb(lv_area_t *area, void *user_data)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Starting pure LVGL icon study");
+    ESP_LOGI(TAG, "Starting circular ElectronBot face demo");
 
     spi_bus_config_t bus_config = CO5300_PANEL_BUS_QSPI_CONFIG(
         LCD_PIN_SCK, LCD_PIN_D0, LCD_PIN_D1, LCD_PIN_D2, LCD_PIN_D3,

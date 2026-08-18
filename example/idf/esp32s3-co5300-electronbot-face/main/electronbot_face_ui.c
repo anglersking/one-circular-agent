@@ -96,6 +96,11 @@ void electronbot_face_ui_init(lv_display_t *display)
     lv_obj_remove_style_all(screen);
     lv_obj_set_style_bg_color(screen, lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
+    // The panel is addressed as a 466x466 framebuffer, but its visible area is circular.
+    // Keep child drawing and touch hit testing inside that same circle for previews and
+    // for boards that expose the full framebuffer to a square capture window.
+    lv_obj_set_style_radius(screen, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_clip_corner(screen, true, LV_PART_MAIN);
 
     s_gif = lv_gif_create(screen);
     lv_gif_set_color_format(s_gif, LV_COLOR_FORMAT_RGB565);
@@ -107,6 +112,8 @@ void electronbot_face_ui_init(lv_display_t *display)
     lv_obj_remove_style_all(touch_layer);
     lv_obj_set_size(touch_layer, FACE_WIDTH, FACE_HEIGHT);
     lv_obj_center(touch_layer);
+    lv_obj_set_style_radius(touch_layer, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_clip_corner(touch_layer, true, LV_PART_MAIN);
     lv_obj_add_flag(touch_layer, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(touch_layer, face_touch_cb, LV_EVENT_CLICKED, NULL);
 
