@@ -9,6 +9,7 @@
 | [`esp32s3-co5300-deepseek-featuretest/`](esp32s3-co5300-deepseek-featuretest/) | DeepSeek 余额例程的隔离实验副本，用于试验蓝色 ElectronBot 风格眼睛动画 | [实验边界、配置、编译与烧录](esp32s3-co5300-deepseek-featuretest/README.md) |
 | [`esp32s3-co5300-grok-agent/`](esp32s3-co5300-grok-agent/) | ESP32-S3 + CO5300 + CST820，纯本地 LVGL blob Agent、多状态眼睛和点击交互；无 Wi-Fi、API 或余额功能 | [工程边界、接线、编译与烧录](esp32s3-co5300-grok-agent/README.md) |
 | [`esp32s3-co5300-electronbot-face/`](esp32s3-co5300-electronbot-face/) | ESP32-S3 + CO5300 + CST820，ElectronBot 风格黑底白眼 Lottie/GIF 全屏动画；无 Wi-Fi、API 或余额功能 | [来源、接线、编译与烧录](esp32s3-co5300-electronbot-face/README.md) |
+| [`esp32s3-co5300-pocket-face/`](esp32s3-co5300-pocket-face/) | ESP32-S3 + CO5300 + CST820，独立移植 ByCoCandy/Pocket 的 6 个 GIF 表情、触摸切换、充电状态和无操作降亮 | [来源、交互、接线、编译与烧录](esp32s3-co5300-pocket-face/README.md) |
 | [`esp32s3-co5300-agent-watch/`](esp32s3-co5300-agent-watch/) | ESP32-S3 + OSPTEK 1.73 英寸 CO5300 AMOLED + CST820，ONE 圆形智能体显示与触摸底座 | [接线、编译与烧录](esp32s3-co5300-agent-watch/README.md) |
 
 ## 使用一个例程
