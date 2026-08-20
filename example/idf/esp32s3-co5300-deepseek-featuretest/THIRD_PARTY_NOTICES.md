@@ -1,5 +1,22 @@
 # Third-Party Notices
 
+## Espressif Brookesia emotion assets
+
+The `assets/emotion_*_284_126.aaf` files are derived from the emotion assets
+used by the Espressif Brookesia speaker product:
+
+https://github.com/espressif/esp-brookesia/tree/release/v0.6/products/speaker
+
+The firmware decodes these assets with the `espressif2022/image_player`
+component and maps their grayscale masks to the DeepSeek blue palette. The
+angry animation follows the upstream white-to-red timing, with the white phase
+replaced by blue. Espressif Brookesia and `image_player` are distributed under
+the Apache License 2.0.
+
+https://www.apache.org/licenses/LICENSE-2.0
+
+## ElectronBot reference asset
+
 `assets/electronbot_blue_idle.gif` is a derived screen asset based on the
 ElectronBot Standalone Lottie expression project:
 

@@ -3,6 +3,7 @@
 
 #include "agent_config.h"
 #include "agent_quota_ui.h"
+#include "brookesia_face_player.h"
 
 #define UI_SCREEN_SIZE 466
 
@@ -13,9 +14,6 @@
 #ifndef AGENT_LOCATION_NAME
 #define AGENT_LOCATION_NAME "SHANGHAI"
 #endif
-
-extern const uint8_t _binary_electronbot_blue_idle_gif_start[];
-extern const uint8_t _binary_electronbot_blue_idle_gif_end[];
 
 static lv_color_t s_bg;
 static lv_color_t s_panel;
@@ -62,6 +60,7 @@ static lv_obj_t *s_setting_provider;
 static lv_obj_t *s_setting_model;
 static lv_obj_t *s_setting_wifi;
 static lv_obj_t *s_setting_key;
+static lv_obj_t *s_setting_face_moods;
 static lv_obj_t *s_setting_autoplay;
 static lv_obj_t *s_setting_hint;
 static lv_obj_t *s_interval_buttons[3];
@@ -70,18 +69,13 @@ static lv_obj_t *s_chart;
 static lv_chart_series_t *s_balance_series;
 static lv_timer_t *s_auto_rotate_timer;
 static bool s_auto_rotate_enabled;
+static bool s_face_mood_autoplay;
 static uint32_t s_auto_rotate_interval_seconds = 5;
 static int32_t s_press_x;
+static int32_t s_press_y;
+static bool s_face_gesture_handled;
 static uint8_t s_page;
-static lv_image_dsc_t s_blue_face_gif = {
-    .header = {
-        .magic = LV_IMAGE_HEADER_MAGIC,
-        .cf = LV_COLOR_FORMAT_RAW,
-        .w = UI_SCREEN_SIZE,
-        .h = UI_SCREEN_SIZE,
-    },
-    .data = _binary_electronbot_blue_idle_gif_start,
-};
+static lv_obj_t *s_face_canvas;
 
 static void palette_init(void)
 {
@@ -158,6 +152,16 @@ static void settings_autoplay_event_cb(lv_event_t *event)
     lv_label_set_text(s_setting_hint, s_auto_rotate_enabled ? "AUTOPLAY ACTIVE" : "AUTOPLAY OFF");
     lv_obj_set_style_text_color(s_setting_hint, s_auto_rotate_enabled ? s_good : s_muted, LV_PART_MAIN);
     auto_rotate_update_timer();
+}
+
+static void settings_face_moods_event_cb(lv_event_t *event)
+{
+    lv_obj_t *row = lv_event_get_target(event);
+    s_face_mood_autoplay = !s_face_mood_autoplay;
+    lv_label_set_text(s_setting_face_moods, s_face_mood_autoplay ? "RANDOM" : "HOLD");
+    lv_obj_set_style_text_color(s_setting_face_moods, s_face_mood_autoplay ? s_good : s_muted, LV_PART_MAIN);
+    lv_obj_set_style_border_color(row, s_face_mood_autoplay ? s_primary : s_line, LV_PART_MAIN);
+    brookesia_face_player_set_autoplay(s_face_mood_autoplay);
 }
 
 static void settings_interval_event_cb(lv_event_t *event)
@@ -260,10 +264,30 @@ static void swipe_event_cb(lv_event_t *event)
 
     if (lv_event_get_code(event) == LV_EVENT_PRESSED) {
         s_press_x = point.x;
+        s_press_y = point.y;
+        s_face_gesture_handled = false;
+        return;
+    }
+
+    if (lv_event_get_code(event) == LV_EVENT_LONG_PRESSED) {
+        if (s_page == 0 && !s_face_mood_autoplay) {
+            brookesia_face_player_next();
+            s_face_gesture_handled = true;
+        }
         return;
     }
 
     if (lv_event_get_code(event) != LV_EVENT_RELEASED) {
+        return;
+    }
+
+    if (s_face_gesture_handled) {
+        s_face_gesture_handled = false;
+        return;
+    }
+
+    if (s_page == 0 && !s_face_mood_autoplay && point.y < s_press_y - 48) {
+        brookesia_face_player_next();
         return;
     }
 
@@ -280,6 +304,7 @@ static lv_obj_t *make_page(void)
     make_block(page, 0, 0, UI_SCREEN_SIZE, UI_SCREEN_SIZE, s_bg);
     lv_obj_add_flag(page, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(page, swipe_event_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(page, swipe_event_cb, LV_EVENT_LONG_PRESSED, NULL);
     lv_obj_add_event_cb(page, swipe_event_cb, LV_EVENT_RELEASED, NULL);
     return page;
 }
@@ -288,12 +313,10 @@ static void make_face_page(void)
 {
     s_face_page = make_page();
 
-    lv_obj_t *face_gif = lv_gif_create(s_face_page);
-    lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_RGB565);
-    lv_gif_set_src(face_gif, &s_blue_face_gif);
-    lv_obj_set_size(face_gif, UI_SCREEN_SIZE, UI_SCREEN_SIZE);
-    lv_obj_center(face_gif);
-    lv_obj_remove_flag(face_gif, LV_OBJ_FLAG_CLICKABLE);
+    s_face_canvas = lv_canvas_create(s_face_page);
+    lv_obj_set_pos(s_face_canvas, 91, 140);
+    lv_obj_set_size(s_face_canvas, 284, 126);
+    lv_obj_remove_flag(s_face_canvas, LV_OBJ_FLAG_CLICKABLE);
 
     // Keep the original dashboard ring as a quiet outer frame. The five decorative
     // blocks were removed; the ring remains behind the status text and around the face.
@@ -483,35 +506,43 @@ static void make_settings_page(void)
     label(s_settings_page, "ONE AGENT CONTROL CENTER", 60, 72, 346, &lv_font_montserrat_14, s_muted,
           LV_TEXT_ALIGN_CENTER);
 
-    s_setting_provider = make_setting_value(111, "PROVIDER", AGENT_PROVIDER_NAME);
-    s_setting_model = make_setting_value(161, "MODEL", AGENT_MODEL_NAME);
-    s_setting_wifi = make_setting_value(211, "WI-FI", "NOT SET");
-    s_setting_key = make_setting_value(261, "API KEY", "NOT SET");
-    lv_obj_t *autoplay_row = block(s_settings_page, 52, 311, 362, 42, s_panel);
+    s_setting_provider = make_setting_value(102, "PROVIDER", AGENT_PROVIDER_NAME);
+    s_setting_model = make_setting_value(142, "MODEL", AGENT_MODEL_NAME);
+    s_setting_wifi = make_setting_value(182, "WI-FI", "NOT SET");
+    s_setting_key = make_setting_value(222, "API KEY", "NOT SET");
+
+    lv_obj_t *face_moods_row = block(s_settings_page, 52, 262, 362, 34, s_panel);
+    lv_obj_set_style_border_width(face_moods_row, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(face_moods_row, s_line, LV_PART_MAIN);
+    lv_obj_add_flag(face_moods_row, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(face_moods_row, settings_face_moods_event_cb, LV_EVENT_CLICKED, NULL);
+    label(s_settings_page, "FACE MOODS", 68, 270, 170, &lv_font_montserrat_14, s_muted, LV_TEXT_ALIGN_LEFT);
+    s_setting_face_moods = label(s_settings_page, "HOLD", 238, 270, 158, &lv_font_montserrat_14, s_muted,
+                                  LV_TEXT_ALIGN_RIGHT);
+
+    lv_obj_t *autoplay_row = block(s_settings_page, 52, 304, 362, 34, s_panel);
     lv_obj_set_style_border_width(autoplay_row, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(autoplay_row, s_line, LV_PART_MAIN);
     lv_obj_add_flag(autoplay_row, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(autoplay_row, settings_autoplay_event_cb, LV_EVENT_CLICKED, NULL);
-    label(s_settings_page, "AUTO PLAY", 68, 319, 170, &lv_font_montserrat_14, s_muted, LV_TEXT_ALIGN_LEFT);
-    s_setting_autoplay = label(s_settings_page, "OFF", 238, 319, 158, &lv_font_montserrat_14, s_muted,
+    label(s_settings_page, "AUTO PAGES", 68, 312, 170, &lv_font_montserrat_14, s_muted, LV_TEXT_ALIGN_LEFT);
+    s_setting_autoplay = label(s_settings_page, "OFF", 238, 312, 158, &lv_font_montserrat_14, s_muted,
                                 LV_TEXT_ALIGN_RIGHT);
 
-    label(s_settings_page, "INTERVAL", 68, 368, 150, &lv_font_montserrat_14, s_muted, LV_TEXT_ALIGN_LEFT);
+    label(s_settings_page, "PAGE INTERVAL", 68, 350, 150, &lv_font_montserrat_14, s_muted, LV_TEXT_ALIGN_LEFT);
     s_interval_buttons[0] = make_interval_button(236, "2S", 2);
     s_interval_buttons[1] = make_interval_button(292, "5S", 5);
     s_interval_buttons[2] = make_interval_button(348, "10S", 10);
 
-    s_setting_hint = label(s_settings_page, "AUTOPLAY OFF", 60, 399, 346, &lv_font_montserrat_14, s_muted,
+    s_setting_hint = label(s_settings_page, "AUTOPLAY OFF", 60, 390, 346, &lv_font_montserrat_14, s_muted,
                            LV_TEXT_ALIGN_CENTER);
-    label(s_settings_page, "SWIPE TO RETURN HOME", 60, 420, 346, &lv_font_montserrat_14, s_muted,
+    label(s_settings_page, "HOLD / SWIPE UP HOME TO CHANGE MOOD", 46, 414, 374, &lv_font_montserrat_14, s_muted,
           LV_TEXT_ALIGN_CENTER);
 }
 
 void agent_quota_ui_init(lv_display_t *display)
 {
     palette_init();
-    s_blue_face_gif.data_size = (size_t)(_binary_electronbot_blue_idle_gif_end -
-                                         _binary_electronbot_blue_idle_gif_start);
     s_root = lv_disp_get_scr_act(display);
     make_block(s_root, 0, 0, UI_SCREEN_SIZE, UI_SCREEN_SIZE, s_bg);
 
@@ -530,6 +561,11 @@ void agent_quota_ui_init(lv_display_t *display)
     lv_timer_pause(s_auto_rotate_timer);
     update_interval_button_styles();
     switch_page(0);
+}
+
+lv_obj_t *agent_quota_ui_get_face_canvas(void)
+{
+    return s_face_canvas;
 }
 
 void agent_quota_ui_set_connection(const char *state, const char *detail, bool ready)

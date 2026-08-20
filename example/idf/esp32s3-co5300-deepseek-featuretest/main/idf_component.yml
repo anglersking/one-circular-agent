@@ -10,3 +10,6 @@ dependencies:
   espressif/esp_lcd_co5300:
     version: 2.0.*
     public: true
+  espressif2022/image_player:
+    version: ^1.1.1
+    public: true

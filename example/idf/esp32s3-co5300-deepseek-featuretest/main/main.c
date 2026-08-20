@@ -31,6 +31,7 @@
 
 #include "agent_config.h"
 #include "agent_quota_ui.h"
+#include "brookesia_face_player.h"
 #include "co5300_init_cmds.h"
 
 static const char *TAG = "AGENT_QUOTA";
@@ -634,6 +635,9 @@ void app_main(void)
                                     wifi_is_configured(), api_is_configured());
         esp_lv_adapter_unlock();
     }
+
+    brookesia_face_player_init(display, agent_quota_ui_get_face_canvas());
+    brookesia_face_player_set_active(true);
 
     xTaskCreate(clock_task, "agent_clock", 4096, NULL, 4, NULL);
 
